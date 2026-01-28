@@ -22,9 +22,27 @@ namespace BCDice.Preprocessor
         public D66SortType D66SortType => D66SortType.NoSort;
 
         /// <inheritdoc/>
+        public CompareOperator? DefaultCmpOp => null;
+
+        /// <inheritdoc/>
+        public int? DefaultTargetNumber => null;
+
+        /// <inheritdoc/>
+        public bool SortBarabaraDice => false;
+
+        /// <inheritdoc/>
+        public int? RerollDiceRerollThreshold => null;
+
+        /// <inheritdoc/>
         public string ChangeText(string text)
         {
             return text;
+        }
+
+        /// <inheritdoc/>
+        public string? GetGrichText(int countOne, int diceCount, int successCount)
+        {
+            return null;
         }
     }
 }

@@ -35,10 +35,39 @@ namespace BCDice.GameSystem
         public virtual int SidesImplicitD => 6;
 
         /// <summary>
+        /// デフォルトの比較演算子
+        /// </summary>
+        public virtual CompareOperator? DefaultCmpOp => null;
+
+        /// <summary>
+        /// デフォルトの目標値
+        /// </summary>
+        public virtual int? DefaultTargetNumber => null;
+
+        /// <summary>
+        /// バラバラダイスでダイス目をソートするかどうか
+        /// </summary>
+        public virtual bool SortBarabaraDice => false;
+
+        /// <summary>
+        /// RerollDiceで振り足しをする出目の閾値
+        /// </summary>
+        public virtual int? RerollDiceRerollThreshold => null;
+
+        /// <summary>
+        /// グリッチテキストを取得する（シャドウラン用）
+        /// </summary>
+        public virtual string? GetGrichText(int countOne, int diceCount, int successCount)
+        {
+            return null;
+        }
+
+        /// <summary>
         /// 共通コマンドのリスト
         /// </summary>
         protected virtual IReadOnlyList<ICommonCommand> CommonCommands { get; } = new ICommonCommand[]
         {
+            VersionCommand.Instance,
             CalcCommand.Instance,
             ChoiceCommand.Instance,
             D66Command.Instance,
@@ -46,6 +75,9 @@ namespace BCDice.GameSystem
             UpperDiceCommand.Instance,
             LowerDiceCommand.Instance,
             CountSuccessCommand.Instance,
+            BarabaraDiceCommand.Instance,
+            TallyDiceCommand.Instance,
+            RerollDiceCommand.Instance,
             AddDiceCommand.Instance,
         };
 
