@@ -19,6 +19,7 @@ namespace BCDice
         {
             _registry.Register(DiceBot.Instance);
             _registry.Register(Cthulhu.Instance);
+            _registry.Register(Cthulhu7th.Instance);
             _registry.Register(SwordWorld2_5.Instance);
             _registry.Register(DoubleCross3.Instance);
             _registry.Register(Insane.Instance);
@@ -30,6 +31,9 @@ namespace BCDice
             _registry.Register(MagicaLogia.Instance);
             _registry.Register(Kamigakari.Instance);
             _registry.Register(MeikyuuKingdom.Instance);
+            _registry.Register(KanColle.Instance);
+            _registry.Register(StellarKnights.Instance);
+            _registry.Register(FateCoreSystem.Instance);
         }
 
         /// <summary>
