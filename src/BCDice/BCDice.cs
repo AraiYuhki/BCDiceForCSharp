@@ -34,6 +34,11 @@ namespace BCDice
             _registry.Register(KanColle.Instance);
             _registry.Register(StellarKnights.Instance);
             _registry.Register(FateCoreSystem.Instance);
+            _registry.Register(GoldenSkyStories.Instance);
+            _registry.Register(Ryutama.Instance);
+            _registry.Register(Ainecadette.Instance);
+            _registry.Register(DungeonsAndDragons.Instance);
+            _registry.Register(Paranoia.Instance);
         }
 
         /// <summary>
