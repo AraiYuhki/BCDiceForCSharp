@@ -1,0 +1,692 @@
+using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+using BCDice.Core;
+
+namespace BCDice.GameSystem
+{
+    /// <summary>
+    /// 新クトゥルフ神話TRPG（クトゥルフ神話TRPG 第7版）
+    /// </summary>
+    public sealed class Cthulhu7th : GameSystemBase
+    {
+        /// <summary>
+        /// シングルトンインスタンス
+        /// </summary>
+        public static readonly Cthulhu7th Instance = new Cthulhu7th();
+
+        /// <inheritdoc/>
+        public override string Id => "Cthulhu7th";
+
+        /// <inheritdoc/>
+        public override string Name => "新クトゥルフ神話TRPG";
+
+        /// <inheritdoc/>
+        public override string SortKey => "しんくとうるふしんわTRPG";
+
+        /// <inheritdoc/>
+        public override string HelpMessage => @"
+・判定　CC(x)<=（目標値）
+　x：ボーナス・ペナルティダイス。省略可。
+　目標値が無くても1D100は表示される。
+　ファンブル／失敗／　レギュラー成功／ハード成功／
+　イクストリーム成功／クリティカル を自動判定。
+　例）CC<=30　CC(2)<=50 CC(+2)<=50 CC(-1)<=75 CC-1<=50 CC1<=65 CC+1<=65 CC
+
+・技能ロールの難易度指定　CC(x)<=(目標値)(難易度)
+　目標値の後に難易度を指定することで
+　成功／失敗／クリティカル／ファンブル を自動判定する。
+　難易度の指定：
+　　r:レギュラー　h:ハード　e:イクストリーム　c:クリティカル
+　例）CC<=70r CC1<=60h CC-2<=50e CC2<=99c
+
+・組み合わせ判定　(CBR(x,y))
+　目標値 x と y で％ロールを行い、成否を判定。
+　例）CBR(50,20)
+
+・自動火器の射撃判定　FAR(w,x,y,z,d,v)
+　w：弾丸の数(1～100）、x：技能値（1～100）、y：故障ナンバー、
+　z：ボーナス・ペナルティダイス(-2～2)。省略可。
+　d：指定難易度で連射を終える（レギュラー：r,ハード：h,イクストリーム：e）。省略可。
+　v：ボレーの弾丸の数を変更する。省略可。
+　命中数と貫通数、残弾数のみ算出。ダメージ算出はありません。
+例）FAR(25,70,98)　FAR(50,80,98,-1)　far(30,70,99,1,R)
+　　far(25,88,96,2,h,5)　FaR(40,77,100,,e,4)　fAr(20,47,100,,,3)
+
+・各種表
+　【狂気関連】
+　・狂気の発作（リアルタイム）（Bouts of Madness Real Time）　BMR
+　・狂気の発作（サマリー）（Bouts of Madness Summary）　BMS
+　・恐怖症（Sample Phobias）表　PH／マニア（Sample Manias）表　MA
+　【魔術関連】
+　・プッシュ時のキャスティング・ロール（Casting Roll）の失敗表
+　　強力でない呪文の場合　FCL／強力な呪文の場合　FCM
+";
+
+        private static readonly Regex SkillRollRegex = new Regex(
+            @"^CC([-+]?\d+)?(?:<=(\d+)([RHEC])?)?$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex CombineRollRegex = new Regex(
+            @"^CBR\((\d+),(\d+)\)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex FullAutoRegex = new Regex(
+            @"^FAR\((-?\d+),(-?\d+),(-?\d+)(?:,(-?\d+)?)?(?:,(-?\w+)?)?(?:,(-?\d+)?)?\)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <inheritdoc/>
+        protected override Result? EvalGameSystemSpecificCommand(string command, IRandomizer randomizer)
+        {
+            if (command.StartsWith("CC", StringComparison.OrdinalIgnoreCase))
+            {
+                return SkillRoll(command, randomizer);
+            }
+            else if (command.StartsWith("CBR", StringComparison.OrdinalIgnoreCase))
+            {
+                return CombineRoll(command, randomizer);
+            }
+            else if (command.StartsWith("FAR", StringComparison.OrdinalIgnoreCase))
+            {
+                return FullAutoResult(command, randomizer);
+            }
+            else if (command == "BMR")
+            {
+                return RollBmrTable(randomizer);
+            }
+            else if (command == "BMS")
+            {
+                return RollBmsTable(randomizer);
+            }
+            else if (command == "FCL")
+            {
+                return Roll1D8Table("キャスティング・ロール失敗(小)表", FailedCastingLTable, randomizer);
+            }
+            else if (command == "FCM")
+            {
+                return Roll1D8Table("キャスティング・ロール失敗(大)表", FailedCastingMTable, randomizer);
+            }
+            else if (command == "PH")
+            {
+                return Roll1D100Table("恐怖症表", PhobiasTable, randomizer);
+            }
+            else if (command == "MA")
+            {
+                return Roll1D100Table("マニア表", ManiasTable, randomizer);
+            }
+
+            return null;
+        }
+
+        private Result? SkillRoll(string command, IRandomizer randomizer)
+        {
+            var match = SkillRollRegex.Match(command);
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            int bonusDice = match.Groups[1].Success ? int.Parse(match.Groups[1].Value) : 0;
+            int? difficulty = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : (int?)null;
+            string? difficultyLevel = match.Groups[3].Success ? match.Groups[3].Value.ToUpperInvariant() : null;
+
+            if (difficulty == 0)
+            {
+                difficulty = null;
+            }
+            else if (difficultyLevel == "H" && difficulty.HasValue)
+            {
+                difficulty /= 2;
+            }
+            else if (difficultyLevel == "E" && difficulty.HasValue)
+            {
+                difficulty /= 5;
+            }
+            else if (difficultyLevel == "C")
+            {
+                difficulty = 0;
+            }
+
+            // ボーナスダイスなしで目標値なしの場合は単純な1D100
+            if (bonusDice == 0 && !difficulty.HasValue)
+            {
+                int dice = randomizer.RollOnce(100);
+                return Result.CreateBuilder($"(1D100) ＞ {dice}")
+                    .SetRands(randomizer.RandResults)
+                    .SetDetailedRands(randomizer.DetailedRandResults)
+                    .Build();
+            }
+
+            if (Math.Abs(bonusDice) > 100)
+            {
+                return Result.CreateBuilder("ボーナス・ペナルティダイスの値は-100以上、100以下としてください")
+                    .Build();
+            }
+
+            var (total, totalList) = RollWithBonus(bonusDice, randomizer);
+
+            string expr = difficulty.HasValue ? $"1D100<={difficulty}" : "1D100";
+            ResultLevel? result = null;
+
+            if (difficultyLevel != null && difficulty.HasValue)
+            {
+                result = ResultLevel.WithDifficultyLevel(total, difficulty.Value);
+            }
+            else if (difficulty.HasValue)
+            {
+                result = ResultLevel.FromValues(total, difficulty.Value);
+            }
+
+            string text = $"({expr}) ボーナス・ペナルティダイス[{bonusDice}]";
+            text += $" ＞ {string.Join(", ", totalList)}";
+            text += $" ＞ {total}";
+
+            if (result != null)
+            {
+                text += $" ＞ {result}";
+            }
+
+            var builder = Result.CreateBuilder(text)
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults);
+
+            if (result != null)
+            {
+                builder.SetCondition(result.IsSuccess);
+                builder.SetCritical(result.IsCritical);
+                builder.SetFumble(result.IsFumble);
+            }
+
+            return builder.Build();
+        }
+
+        private Result? CombineRoll(string command, IRandomizer randomizer)
+        {
+            var match = CombineRollRegex.Match(command);
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            int difficulty1 = int.Parse(match.Groups[1].Value);
+            int difficulty2 = int.Parse(match.Groups[2].Value);
+
+            int total = randomizer.RollOnce(100);
+
+            var result1 = ResultLevel.FromValues(total, difficulty1);
+            var result2 = ResultLevel.FromValues(total, difficulty2);
+
+            string rank;
+            if (result1.IsSuccess && result2.IsSuccess)
+            {
+                rank = "成功";
+            }
+            else if (result1.IsSuccess || result2.IsSuccess)
+            {
+                rank = "部分的成功";
+            }
+            else
+            {
+                rank = "失敗";
+            }
+
+            string text = $"(1d100<={difficulty1},{difficulty2}) ＞ {total}[{result1},{result2}] ＞ {rank}";
+
+            return Result.CreateBuilder(text)
+                .SetSuccess(result1.IsSuccess && result2.IsSuccess)
+                .SetFailure(result1.IsFailure && result2.IsFailure)
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults)
+                .Build();
+        }
+
+        private Result? FullAutoResult(string command, IRandomizer randomizer)
+        {
+            return Cthulhu7thFullAuto.Eval(command, randomizer);
+        }
+
+        private Result RollBmrTable(IRandomizer randomizer)
+        {
+            int totalN = randomizer.RollOnce(10);
+            string text = MadnessRealTimeTable[totalN - 1];
+            int timeN = randomizer.RollOnce(10);
+
+            return Result.CreateBuilder($"狂気の発作（リアルタイム）({totalN}) ＞ {text}(1D10＞{timeN}ラウンド)")
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults)
+                .Build();
+        }
+
+        private Result RollBmsTable(IRandomizer randomizer)
+        {
+            int totalN = randomizer.RollOnce(10);
+            string text = MadnessSummaryTable[totalN - 1];
+            int timeN = randomizer.RollOnce(10);
+
+            return Result.CreateBuilder($"狂気の発作（サマリー）({totalN}) ＞ {text}(1D10＞{timeN}時間)")
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults)
+                .Build();
+        }
+
+        private Result Roll1D8Table(string tableName, string[] table, IRandomizer randomizer)
+        {
+            int totalN = randomizer.RollOnce(8);
+            string text = table[totalN - 1];
+
+            return Result.CreateBuilder($"{tableName}({totalN}) ＞ {text}")
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults)
+                .Build();
+        }
+
+        private Result Roll1D100Table(string tableName, string[] table, IRandomizer randomizer)
+        {
+            int totalN = randomizer.RollOnce(100);
+            string text = table[totalN - 1];
+
+            return Result.CreateBuilder($"{tableName}({totalN}) ＞ {text}")
+                .SetRands(randomizer.RandResults)
+                .SetDetailedRands(randomizer.DetailedRandResults)
+                .Build();
+        }
+
+        /// <summary>
+        /// 1D100の一の位用のダイスロール（0から9を返す）
+        /// </summary>
+        private static int RollOnesD10(IRandomizer randomizer)
+        {
+            int dice = randomizer.RollOnce(10);
+            return dice == 10 ? 0 : dice;
+        }
+
+        /// <summary>
+        /// ボーナス/ペナルティダイス付きのロール
+        /// </summary>
+        internal static (int Total, int[] TotalList) RollWithBonus(int bonus, IRandomizer randomizer)
+        {
+            int count = Math.Abs(bonus) + 1;
+            int[] tensList = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                tensList[i] = randomizer.RollTensD10();
+            }
+
+            int ones = RollOnesD10(randomizer);
+
+            int[] diceList = tensList.Select(tens =>
+            {
+                int dice = tens + ones;
+                return dice == 0 ? 100 : dice;
+            }).ToArray();
+
+            int result = bonus >= 0 ? diceList.Min() : diceList.Max();
+
+            return (result, diceList);
+        }
+
+        #region Tables
+
+        private static readonly string[] MadnessRealTimeTable = new[]
+        {
+            "健忘症：探索者は、最後に安全な場所にいた時からあとに起こった出来事の記憶を持たない。例えば、朝食を食べていた次の瞬間には怪物と向かい合っている。これは1D10ラウンド続く。",
+            "身体症状症：探索者は1D10ラウンドの間、狂気によって視覚や聴覚に異常が生じたり、四肢の1つまたは複数が動かなくなる。",
+            "暴力衝動：赤い霧が探索者に降り、1D10ラウンドの間、抑えの利かない暴力と破壊を敵味方を問わず周囲に向かって爆発させる。",
+            "偏執症：探索者は1D10ラウンドの間、重い偏執症に襲われる。誰もが探索者に襲い掛かろうとしている。信用できる者はいない。監視されている。裏切ったやつがいる。これはわなだ。",
+            "重要な人々：探索者のバックストーリーの重要な人々を見直す。探索者はその場にいた人物を、自分にとっての重要な人々だと思い込む。人間関係の性質を考慮した上で、探索者はそれに従って行動する。1D10ラウンド続く。",
+            "失神：探索者は失神する。1D10ラウンド後に回復する。",
+            "パニックになって逃亡する：探索者は利用できるあらゆる手段を使って、可能なかぎり遠くへ逃げ出さずにはいられない。それが唯一の車両を奪って仲間を置き去りにすることであっても。探索者は1D10ラウンドの間、逃げ続ける。",
+            "身体的ヒステリーもしくは感情爆発：探索者は1D10ラウンドの間、笑ったり、泣いたり、あるいは叫んだりし続け、行動できなくなる。",
+            "恐怖症：探索者は新しい恐怖症に陥る。恐怖症表（PHコマンド）をロールするか、キーパーが恐怖症を1つ選ぶ。恐怖症の原因は存在しなくとも、その探索者は次の1D10ラウンドの間、それがそこにあると思い込む。",
+            "マニア：探索者は新しいマニアに陥る。マニア表（MAコマンド）をロールするか、キーパーがマニアを1つ選ぶ。その探索者は次の1D10ラウンドの間、自分の新しいマニアに没頭しようとする。"
+        };
+
+        private static readonly string[] MadnessSummaryTable = new[]
+        {
+            "健忘症：探索者が意識を取り戻すと、見知らぬ場所におり、自分が誰かもわからない。記憶は時間をかけてゆっくりと戻るだろう。",
+            "盗難：探索者は1D10時間後に意識を取り戻すが、盗難の被害を受けている。傷つけられてはいない。探索者が秘蔵の品を身に着けていた場合（「探索者のバックストーリー」参照）、〈幸運〉ロールを行い、それが盗まれていないか判定する。値打ちのあるものはすべて自動的に失われる。",
+            "暴行：探索者は1D10時間後に意識を取り戻し、自分が暴行を受け、傷ついていることに気づく。耐久力は狂気に陥る前の半分に減少している。ただし重症は生じていない。盗まれたものはない。どのようにダメージが加えられたかは、キーパーに委ねられる。",
+            "暴力：探索者は暴力と破壊の噴流を爆発させる。探索者が意識を取り戻した時、その行動を認識し記憶していることもあればそうでないこともある。探索者が暴力を振るった物、もしくは人、そして相手を殺してしまったのか、あるいは単に傷つけただけなのかはキーパーに委ねられる。",
+            "イデオロギー／信念：探索者のバックストーリーのイデオロギーと信念を参照する。探索者はこれらの1つの権化となり、急進的かつ狂気じみて、感情もあらわに主張するようになる。例えば、宗教に関係する者は、その後地下鉄で声高に福音を説教しているところを目撃されるかもしれない。",
+            "重要な人々：探索者のバックストーリーの重要な人々を参照し、なぜその人物との関係が重要かを考える。時間がたってから（1D10時間以上）、探索者はその人物に近づくための最善の行動、そしてその人物との関係にとって最善の行動をとる。",
+            "収容：探索者は精神療養施設あるいは警察の留置所で意識を取り戻す。探索者は徐々にそこにいたった出来事を思い出すかもしれない。",
+            "パニック：探索者は非常に遠い場所で意識を取り戻す。荒野で道に迷っているか、列車に乗っているか、長距離バスに乗っているかもしれない。",
+            "恐怖症：探索者は新たな恐怖症を獲得する。恐怖症表（PHコマンド）をロールするか、キーパーがどれか1つ選ぶ。探索者は1D10時間後に意識を取り戻し、この新たな恐怖症の対象を避けるためにあらゆる努力をする。",
+            "マニア：探索者は新たなマニアを獲得する。マニア表（MAコマンド）をロールするか、キーパーがどれか1つ選ぶ。この狂気の発作の間、探索者はこの新たなマニアに完全に溺れているだろう。これがほかの人々に気づかれるかどうかは、キーパーとプレイヤーに委ねられる。"
+        };
+
+        private static readonly string[] FailedCastingLTable = new[]
+        {
+            "視界がぼんやりするか、あるいは一時的な失明。",
+            "悲鳴、声、あるいはほかの雑音が肉体から発せられる。",
+            "強風やほかの大気の現象。",
+            "術者、ほかのその場に居合わせた者が出血する。あるいは環境（例えば、壁）から出血する。",
+            "奇妙な幻視と幻覚。",
+            "その付近の小動物たちが爆発する。",
+            "硫黄の悪臭。",
+            "クトゥルフ神話の怪物が偶然召喚される。"
+        };
+
+        private static readonly string[] FailedCastingMTable = new[]
+        {
+            "大地が震え、壁に亀裂が入って崩れる。",
+            "叙事詩的な電撃。",
+            "血が空から降る。",
+            "術者の手がしなび、焼けただれる。",
+            "術者は不自然に年をとる（年齢に+2D10歳、30ページの「年齢」を参照し、能力値に修正を適用すること）。",
+            "強力な、あるいは無数のクトゥルフ神話存在が現れ、術者を手始めに、近くの全員を攻撃する！",
+            "術者や近くの全員が遠い時代か場所に吸い込まれる。",
+            "クトゥルフ神話の神格が偶然招来される。"
+        };
+
+        private static readonly string[] PhobiasTable = new[]
+        {
+            "入浴恐怖症：体、手、顔を洗うのが怖い。",
+            "高所恐怖症：高いところが怖い。",
+            "飛行恐怖症：飛ぶのが怖い。",
+            "広場恐怖症：広場、公共の(混雑した)場所が怖い。",
+            "鶏肉恐怖症：鶏肉が怖い。",
+            "ニンニク恐怖症：ニンニクが怖い。",
+            "乗車恐怖症：車両の中にいたり車両に乗るのが怖い。",
+            "風恐怖症：風が怖い。",
+            "男性恐怖症：男性が怖い。",
+            "イングランド恐怖症：イングランド、もしくはイングランド文化などが怖い。",
+            "花恐怖症：花が怖い。",
+            "切断恐怖症：手足や指などが切断された人が怖い。",
+            "クモ恐怖症：クモが怖い。",
+            "稲妻恐怖症：稲妻が怖い。",
+            "廃墟恐怖症：廃墟が怖い。",
+            "笛恐怖症：笛(フルート)が怖い。",
+            "細菌恐怖症：細菌、バクテリアが怖い。",
+            "銃弾恐怖症：投擲物や銃弾が怖い。",
+            "落下恐怖症：落下が怖い。",
+            "書物恐怖症：本が怖い。",
+            "植物恐怖症：植物が怖い。",
+            "美女恐怖症：美しい女性が怖い。",
+            "低温恐怖症：冷たいものが怖い。",
+            "時計恐怖症：時計が怖い。",
+            "閉所恐怖症：壁に囲まれた場所が怖い。",
+            "道化師恐怖症：道化師が怖い。",
+            "犬恐怖症：犬が怖い。",
+            "悪魔恐怖症：悪魔が怖い。",
+            "群集恐怖症：人混みが怖い。",
+            "歯科医恐怖症：歯科医が怖い。",
+            "処分恐怖症：物を捨てるのが怖い(ためこみ症)",
+            "毛皮恐怖症：毛皮が怖い。",
+            "構断恐怖症：道路を横断するのが怖い。",
+            "教会恐怖症：教会が怖い。",
+            "鏡恐怖症：鏡が怖い。",
+            "ピン恐怖症：針やピンが怖い。",
+            "昆虫恐怖症：昆虫が怖い。",
+            "猫恐怖症：猫が怖い。",
+            "橋恐怖症：橋を渡るのが怖い。",
+            "老人恐怖症：老人や年をとることが怖い。",
+            "女性恐怖症：女性が怖い。",
+            "血液恐怖症：血が怖い。",
+            "過失恐怖症：失敗が怖い。",
+            "接触恐怖症：触ることが怖い。",
+            "爬虫類恐怖症：爬虫類が怖い。",
+            "霧恐怖症：霧が怖い。",
+            "銃器恐怖症：銃器が怖い。",
+            "水恐怖症：水が怖い。",
+            "睡眠恐怖症：眠ったり、催眠状態に陥るのが怖い。",
+            "医師恐怖症：医師が怖い。",
+            "魚恐怖症：魚が怖い。",
+            "ゴキブリ恐怖症：ゴキブリが怖い。",
+            "雷鳴恐怖症：雷鳴が怖い。",
+            "野菜恐怖症：野菜が怖い。",
+            "大騒音恐怖症：大きな騒音が怖い。",
+            "湖恐怖症：湖が怖い。",
+            "機械恐怖症：機械や装置が怖い。",
+            "巨大物恐怖症：巨大なものが怖い。",
+            "拘束恐怖症：縛られたり結びつけられたりするのが怖い。",
+            "隕石恐怖症：流星や隕石が怖い。",
+            "孤独恐怖症：独りでいることが怖い。",
+            "汚染恐怖症：汚れたり汚染されたりするのが怖い。",
+            "粘液恐怖症：粘液、粘体が怖い。",
+            "死体恐怖症：死体が怖い。",
+            "8恐怖症：8の数字が怖い。",
+            "歯恐怖症：歯が怖い。",
+            "夢恐怖症：夢が怖い。",
+            "名称恐怖症：特定の言葉（1つまたは複数）を聞くのが怖い。",
+            "蛇恐怖症：蛇が怖い。",
+            "鳥恐怖症：鳥が怖い。",
+            "寄生生物恐怖症：寄生生物が怖い。",
+            "人形恐怖症：人形が怖い。",
+            "恐食症：のみ込むこと食べること、もしくは食べられることが怖い。",
+            "薬物恐怖症：薬物が怖い。",
+            "幽霊恐怖症：幽霊が怖い。",
+            "羞明：日光が怖い。",
+            "ひげ恐怖症：ひげが怖い",
+            "河川恐怖症：川が怖い",
+            "アルコール恐怖症：アルコールやアルコール飲料が怖い。",
+            "火恐怖症：火が怖い。",
+            "魔術恐怖症：魔術が怖い。",
+            "暗黒恐怖症：暗闘や夜が怖い。",
+            "月恐怖症：月が怖い。",
+            "鉄道恐怖症：列車の旅が怖い。",
+            "星恐怖症：星が怖い。",
+            "狭所恐怖症：狭いものや場所が怖い。",
+            "対称恐怖症：左右対称が怖い。",
+            "生き埋め恐怖症：生き埋めになることや墓地が怖い。",
+            "雄牛恐怖症：雄牛が怖い。",
+            "電話恐怖症：電話が怖い。",
+            "奇形恐怖症：怪物が怖い。",
+            "海洋恐怖症：海が怖い。",
+            "手術恐怖症：外科手術が怖い。",
+            "13恐怖症：13の数字が怖い。",
+            "衣類恐怖症：衣服が怖い。",
+            "魔女恐怖症：魔女と魔術が怖い。",
+            "黄色恐怖症：黄色や「黄色」という言葉が怖い。",
+            "外国語恐怖症：外国語が怖い。",
+            "外国人恐怖症：外国人が怖い。",
+            "動物恐怖症：動物が怖い。"
+        };
+
+        private static readonly string[] ManiasTable = new[]
+        {
+            "洗浄マニア：自分の体を洗わずにはいられない。",
+            "無為マニア：病的な優柔不断。",
+            "暗闇マニア：暗黒に関する過度の嗜好。",
+            "高所マニア：高い場所に登らずにはいられない。",
+            "善良マニア：病的な親切。",
+            "広場マニア：開けた場所にいたいという激しい願望。",
+            "先鋭マニア：鋭いもの、とがったものへの執着。",
+            "猫マニア：猫に関する異常な愛好心。",
+            "疼痛性愛：痛みへの執着。",
+            "にんにくマニア：にんにくへの執着。",
+            "乗り物マニア：車の中にいることへの執着。",
+            "病的快活：不合理なほがらかさ。",
+            "花マニア：花への執着。",
+            "計算マニア：数への偏執的な没頭。",
+            "浪費マニア：衝動的あるいは無謀な浪費。",
+            "自己マニア：孤独への過度の嗜好。",
+            "バレエマニア：バレエに関する異常な愛好心。",
+            "書籍約盗癖：本を盗みたいという強迫的衝動。",
+            "書物マニア：本または読書、あるいはその両方への執着。",
+            "歯ぎしりマニア：歯ぎしりしたいという強迫的衝動。",
+            "悪霊マニア：誰かの中に邪悪な精霊がいるという病的な信念。",
+            "自己愛マニア：自分自身の美への執着。",
+            "地図マニア：いたる所の地図を見る制御不可能な強迫的衝動。",
+            "飛び降りマニア：高い場所から跳躍することへの執着。",
+            "寒冷マニア：冷たさ、または冷たいもの、あるいはその両方への異常な欲望。",
+            "舞踏マニア：踊ることへの愛好もしくは制御不可能な熱狂。",
+            "睡眠マニア：寝ることへの過度の願望。",
+            "墓地マニア：墓地への執着。",
+            "色彩マニア：特定の色への執着。",
+            "ピエロマニア：ピエロへの執着。",
+            "遭遇マニア：恐ろしい状況を経験したいという強迫的衝動。",
+            "殺害マニア：殺害への執着。",
+            "悪魔マニア：誰かが悪魔にとりつかれているという病的な信念。",
+            "皮膚マニア：人の皮膚を引っぱりたいという強迫的衝動。",
+            "正義マニア：正義が完遂されるのを見たいという執着。",
+            "アルコールマニア：アルコールに関する異常な欲求。",
+            "毛皮マニア：毛皮を所有することへの執着。",
+            "贈り物マニア：贈り物を与えることへの執着。",
+            "逃走マニア：逃走することへの迫的衝動。",
+            "外出マニア：外を歩き回ることの強迫的衝動。",
+            "自己中心マニア：不合理な自心の態度か自己崇拝。",
+            "公職マニア：公的な職業に就きいという強欲な衝動。",
+            "戦慄マニア：誰かが罪を犯したという病的な信念",
+            "知識マニア：知識を得ることへ執着。",
+            "静寂マニア：静寂であることへ強迫的衝動。",
+            "エーテルマニア：エーテルへの切望",
+            "求婚マニア：奇妙な求婚をすることへの執着。",
+            "笑いマニア：制御不可能な笑うことへの強迫的衝動。",
+            "魔術マニア：魔女と魔術への執着。",
+            "筆記マニア：すべてを書き留めることへの執着。",
+            "裸体マニア：裸になりたいという強迫的衝動。",
+            "幻想マニア：快い幻想(現実とは関係なく)にとらわれやすい異常な傾向。",
+            "蟲マニア：蟲に関する過度の嗜好。",
+            "火器マニア：火器への執着。",
+            "水マニア：水に関する不合理な渇望。",
+            "魚マニア：魚への執着。",
+            "アイコンマニア：像や肖像への執着。",
+            "アイドルマニア：偶像への執着または献身。",
+            "情報マニア：事実を集めることへの過度の献身。",
+            "絶叫マニア：叫ぶことへの説明できない強迫的衝動。",
+            "窃盗マニア：盗むことへの説明できない強迫的衝動。",
+            "騒音マニア：大きな、あるいは甲高い騒音を出すことへの制御不可能な強迫的衝動。",
+            "ひもマニア：ひもへの執着。",
+            "宝くじマニア：宝くじに参加したいという極度の願望。",
+            "うつマニア：異常に深くふさぎ込む傾向。",
+            "巨石マニア：環状列石/立石があると奇妙な考えにとらわれる異常な傾向。",
+            "音楽マニア：音楽もしくは特定の旋律への執着。",
+            "作詩マニア：詩を書くことへの強欲な願望。",
+            "憎悪マニア：何らかの対象あるいはグループの何もかもを憎む執着。",
+            "偏執マニア：ただ1つの思想やアイデアへの異常な執着。",
+            "虚言マニア：異常なほどにうそをついたり、誇張して話す。",
+            "疾病マニア：想像上の病気に苦められる幻想。",
+            "記録マニア：あらゆるものを記録に残そうという強迫的衝動。",
+            "名前マニア：人々、場所、ものなどの名前への執着",
+            "単語マニア：ある単語を繰り返したいという押さえ切れない欲求。",
+            "爪損傷マニア：指の爪をむしったりはがそうとする強迫的衝動。",
+            "美食マニア：1種類の食物への異常な愛。",
+            "不平マニア：不平を言うことへの異常な喜び。",
+            "仮面マニア：仮面や覆面を着けたいという強迫的衝動。",
+            "幽霊マニア：幽霊への執着。",
+            "殺人マニア：殺人への病的な傾向。",
+            "光線マニア：光への病的な願望。",
+            "放浪マニア：社会の規範に背きたいという異常な欲望。",
+            "長者マニア：富への強迫的な欲望。",
+            "病的虚言マニア：うそをつきたくてたまらない強迫的衝動。",
+            "放火マニア：火をつけることへの強迫的衝動。",
+            "質問マニア：質問したいという激しい強迫的衝動。",
+            "鼻マニア：鼻をいじりたいという強迫的衝動。",
+            "落書きマニア：いらずら書きや落書きへの執着。",
+            "列車マニア：列車と鉄道旅行への強い魅了。",
+            "知性マニア：誰かが信じられないほど知的であるという幻想。",
+            "テクノマニア：新技術への執着。",
+            "タナトスマニア：誰かが死を招く魔術によって呪われているという信念。",
+            "宗教マニア：その人が神であるという信仰。",
+            "かき傷マニア：かき傷をつけることへの強迫的衝動。",
+            "手術マニア：外科手術を行なうことへの不合理な嗜好。",
+            "抜毛マニア：自分の髪を引き抜くことへの切望。",
+            "失明マニア：病的な視覚障害。",
+            "異国マニア：外国のものへの執着。",
+            "動物マニア：動物への正気でない溺愛。"
+        };
+
+        #endregion
+    }
+
+    /// <summary>
+    /// Cthulhu7thの判定結果レベル
+    /// </summary>
+    internal class ResultLevel
+    {
+        private enum Level
+        {
+            Fumble = 0,
+            Failure = 1,
+            Success = 2,
+            RegularSuccess = 3,
+            HardSuccess = 4,
+            ExtremeSuccess = 5,
+            Critical = 6
+        }
+
+        private static readonly string[] LevelNames = new[]
+        {
+            "ファンブル",
+            "失敗",
+            "成功",
+            "レギュラー成功",
+            "ハード成功",
+            "イクストリーム成功",
+            "クリティカル"
+        };
+
+        private readonly Level _level;
+
+        private ResultLevel(Level level)
+        {
+            _level = level;
+        }
+
+        public bool IsSuccess => _level >= Level.Success;
+        public bool IsFailure => _level <= Level.Failure;
+        public bool IsCritical => _level == Level.Critical;
+        public bool IsFumble => _level == Level.Fumble;
+
+        public override string ToString() => LevelNames[(int)_level];
+
+        /// <summary>
+        /// 難易度指定ありの判定
+        /// </summary>
+        public static ResultLevel WithDifficultyLevel(int total, int difficulty)
+        {
+            int fumble = difficulty < 50 ? 96 : 100;
+
+            if (total == 1)
+            {
+                return new ResultLevel(Level.Critical);
+            }
+            else if (total >= fumble)
+            {
+                return new ResultLevel(Level.Fumble);
+            }
+            else if (total <= difficulty)
+            {
+                return new ResultLevel(Level.Success);
+            }
+            else
+            {
+                return new ResultLevel(Level.Failure);
+            }
+        }
+
+        /// <summary>
+        /// 通常判定（レギュラー/ハード/イクストリーム判定あり）
+        /// </summary>
+        public static ResultLevel FromValues(int total, int difficulty, bool fumbleable = false)
+        {
+            int fumble = (difficulty < 50 || fumbleable) ? 96 : 100;
+
+            if (total == 1)
+            {
+                return new ResultLevel(Level.Critical);
+            }
+            else if (total >= fumble)
+            {
+                return new ResultLevel(Level.Fumble);
+            }
+            else if (total <= difficulty / 5)
+            {
+                return new ResultLevel(Level.ExtremeSuccess);
+            }
+            else if (total <= difficulty / 2)
+            {
+                return new ResultLevel(Level.HardSuccess);
+            }
+            else if (total <= difficulty)
+            {
+                return new ResultLevel(Level.RegularSuccess);
+            }
+            else
+            {
+                return new ResultLevel(Level.Failure);
+            }
+        }
+    }
+}
