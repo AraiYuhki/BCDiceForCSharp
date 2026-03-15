@@ -134,18 +134,16 @@ namespace BCDice.GameSystem
 
             if (isSpecial)
             {
-                builder.SetCritical(true).SetSuccess(true);
+                return builder.SetCritical(true).SetSuccess(true).Build();
             }
             else if (isFumble)
             {
-                builder.SetFumble(true).SetFailure(true);
+                return builder.SetFumble(true).SetFailure(true).Build();
             }
             else
             {
-                builder.SetCondition(success);
+                return builder.SetCondition(success).Build();
             }
-
-            return builder.Build();
         }
 
         private Result? EvalMagicTableCommand(string command, IRandomizer randomizer)

@@ -163,7 +163,7 @@ namespace BCDice.GameSystem
 
             if (success.HasValue)
             {
-                builder.SetCondition(success.Value);
+                return builder.SetCondition(success.Value).Build();
             }
 
             return builder.Build();

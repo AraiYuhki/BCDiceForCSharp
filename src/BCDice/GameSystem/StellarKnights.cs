@@ -233,7 +233,7 @@ PET：性格表、FT[x]：フラグメント表（x回、省略時5回）
             int d66_1 = IndexToD66(index1);
             int d66_2 = IndexToD66(index2);
 
-            return Result.CreateBuilder($"性格表({d66_1},{d66_2}) ＞ {value1}にして{value2}")
+            return Result.CreateBuilder($"性格表({d66_1},{d66_2}).Build() ＞ {value1}にして{value2}")
                 .SetRands(randomizer.RandResults)
                 .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();

@@ -128,16 +128,16 @@ namespace BCDice.GameSystem
 
             if (isFumble)
             {
-                builder.SetFumble(true).SetFailure(true);
+                return builder.SetFumble(true).SetFailure(true).Build();
             }
             else if (isCritical)
             {
-                builder.SetCritical(true);
+                return builder.SetCritical(true).Build();
             }
 
             if (successCount > 0)
             {
-                builder.SetSuccess(true);
+                return builder.SetSuccess(true).Build();
             }
 
             return builder.Build();

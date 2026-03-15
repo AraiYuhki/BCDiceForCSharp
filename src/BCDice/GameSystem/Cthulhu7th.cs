@@ -151,7 +151,7 @@ namespace BCDice.GameSystem
             if (bonusDice == 0 && !difficulty.HasValue)
             {
                 int dice = randomizer.RollOnce(100);
-                return Result.CreateBuilder($"(1D100) ＞ {dice}")
+                return Result.CreateBuilder($"(1D100).Build() ＞ {dice}")
                     .SetRands(randomizer.RandResults)
                     .SetDetailedRands(randomizer.DetailedRandResults)
                     .Build();
@@ -192,9 +192,11 @@ namespace BCDice.GameSystem
 
             if (result != null)
             {
-                builder.SetCondition(result.IsSuccess);
-                builder.SetCritical(result.IsCritical);
-                builder.SetFumble(result.IsFumble);
+                return builder
+                    .SetCondition(result.IsSuccess)
+                    .SetCritical(result.IsCritical)
+                    .SetFumble(result.IsFumble)
+                    .Build();
             }
 
             return builder.Build();
@@ -251,7 +253,7 @@ namespace BCDice.GameSystem
             string text = MadnessRealTimeTable[totalN - 1];
             int timeN = randomizer.RollOnce(10);
 
-            return Result.CreateBuilder($"狂気の発作（リアルタイム）({totalN}) ＞ {text}(1D10＞{timeN}ラウンド)")
+            return Result.CreateBuilder($"狂気の発作（リアルタイム）({totalN}).Build() ＞ {text}(1D10＞{timeN}ラウンド)")
                 .SetRands(randomizer.RandResults)
                 .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();
@@ -263,7 +265,7 @@ namespace BCDice.GameSystem
             string text = MadnessSummaryTable[totalN - 1];
             int timeN = randomizer.RollOnce(10);
 
-            return Result.CreateBuilder($"狂気の発作（サマリー）({totalN}) ＞ {text}(1D10＞{timeN}時間)")
+            return Result.CreateBuilder($"狂気の発作（サマリー）({totalN}).Build() ＞ {text}(1D10＞{timeN}時間)")
                 .SetRands(randomizer.RandResults)
                 .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();
@@ -274,7 +276,7 @@ namespace BCDice.GameSystem
             int totalN = randomizer.RollOnce(8);
             string text = table[totalN - 1];
 
-            return Result.CreateBuilder($"{tableName}({totalN}) ＞ {text}")
+            return Result.CreateBuilder($"{tableName}({totalN}).Build() ＞ {text}")
                 .SetRands(randomizer.RandResults)
                 .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();
@@ -285,7 +287,7 @@ namespace BCDice.GameSystem
             int totalN = randomizer.RollOnce(100);
             string text = table[totalN - 1];
 
-            return Result.CreateBuilder($"{tableName}({totalN}) ＞ {text}")
+            return Result.CreateBuilder($"{tableName}({totalN}).Build() ＞ {text}")
                 .SetRands(randomizer.RandResults)
                 .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();

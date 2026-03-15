@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using BCDice.Core;
@@ -147,7 +148,10 @@ namespace BCDice.GameSystem
             if (targetNumber.HasValue)
             {
                 var (outcomeText, success, failure, critical) = Outcome(total, targetNumber.Value);
-                sequence.Add(outcomeText);
+                if (outcomeText != null)
+                {
+                    sequence.Add(outcomeText);
+                }
                 isSuccess = success;
                 isFailure = failure;
                 isCritical = critical;
@@ -157,8 +161,6 @@ namespace BCDice.GameSystem
                 .SetSuccess(isSuccess)
                 .SetFailure(isFailure)
                 .SetCritical(isCritical)
-                .SetRands(randomizer.RandResults)
-                .SetDetailedRands(randomizer.DetailedRandResults)
                 .Build();
         }
 
@@ -184,19 +186,19 @@ namespace BCDice.GameSystem
             return $"{ladder}({sign}{total})";
         }
 
-        private static (string Text, bool IsSuccess, bool IsFailure, bool IsCritical) Outcome(int total, int target)
+        private static (string? Text, bool IsSuccess, bool IsFailure, bool IsCritical) Outcome(int total, int target)
         {
-            if (total >= target + 3)
+            if (total == target)
             {
-                return ("Succeed with Style", true, false, true);
+                return ("Tie(+0)", true, false, false);
             }
             else if (total == target + 1)
             {
                 return ("Succeed(+1)", true, false, false);
             }
-            else if (total == target)
+            else if (total >= target + 3)
             {
-                return ("Tie(+0)", true, false, false);
+                return ("Succeed with Style", true, false, true);
             }
             else if (total >= target)
             {

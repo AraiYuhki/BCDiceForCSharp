@@ -1,0 +1,230 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using BCDice.Core;
+using BCDice.Arithmetic;
+
+namespace BCDice.GameSystem
+{
+    public sealed class GundogRevised : GameSystemBase
+    {
+        public static readonly GundogRevised Instance = new GundogRevised();
+
+        public override string Id => "GundogRevised";
+        public override string Name => "\u30ac\u30f3\u30c9\u30c3\u30b0\u30fb\u30ea\u30f4\u30a1\u30a4\u30ba\u30c9";
+        public override string SortKey => "\u304b\u3093\u3068\u3064\u304f\u308a\u3046\u3042\u3044\u3059\u3068";
+
+        private static readonly Regex DptReg = new Regex(@"^(\w)DPT([+\-\d]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex FtReg = new Regex(@"^(\w)FT([+\-\d]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        protected override Result? EvalGameSystemSpecificCommand(string command, IRandomizer randomizer)
+        {
+            string upper = command.ToUpper();
+            string ttype = "", type = "";
+            string[]? table = null;
+            int mod = 0;
+
+            var mDpt = DptReg.Match(upper);
+            if (mDpt.Success)
+            {
+                ttype = "\u30c0\u30e1\u30fc\u30b8\u30da\u30ca\u30eb\u30c6\u30a3\u30fc";
+                string head = mDpt.Groups[1].Value;
+                if (mDpt.Groups[2].Value != "")
+                    mod = ArithmeticEvaluator.Eval(mDpt.Groups[2].Value, RoundType.Floor) ?? 0;
+                (type, table) = GetDamageTypeAndTable(head);
+            }
+
+            var mFt = FtReg.Match(upper);
+            if (mFt.Success)
+            {
+                ttype = "\u30d5\u30a1\u30f3\u30d6\u30eb";
+                string head = mFt.Groups[1].Value;
+                if (mFt.Groups[2].Value != "")
+                    mod = ArithmeticEvaluator.Eval(mFt.Groups[2].Value, RoundType.Floor) ?? 0;
+                (type, table) = GetFumbleTypeAndTable(head);
+            }
+
+            if (string.IsNullOrEmpty(type) || table == null) return null;
+
+            var diceArray = randomizer.RollBarabara(2, 10);
+            int dice = mod + diceArray.Where(x => x < 10).Sum();
+            int diceOriginalText = dice;
+            if (dice < 0) dice = 0;
+            if (dice > 18) dice = 18;
+
+            string text = type + ttype + "\u8868[" + diceOriginalText + "] \uff1e " + table[dice];
+            return Result.Success(text);
+        }
+
+        private static (string type, string[] table) GetDamageTypeAndTable(string head)
+        {
+            switch (head)
+            {
+                case "S": return ("\u5c04\u6483", new string[]
+                {
+                    "\u5bfe\u8c61\u306f[\u6b7b\u4ea1]",
+                    "[\u8ffd\u52a0D]4D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-40\uff05/[\u67a6\u6d67\u5224\u5b9a]15",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]14",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]13",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]12",
+                    "[\u8ffd\u52a0D]2D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]11",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]11",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]10",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]8",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]4",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-20\uff05",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-10\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "[\u4e0d\u5b89\u5b9a]",
+                    "\u624b\u306b\u6301\u3063\u305f\u6b66\u5668\u3092\u843d\u3068\u3059\u3002\u8907\u6570\u3042\u308b\u5834\u5408\u306f\u30e9\u30f3\u30c0\u30e0",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                case "M": return ("\u683c\u95d8", new string[]
+                {
+                    "\u5bfe\u8c61\u306f[\u6b7b\u4ea1]",
+                    "[\u8ffd\u52a0D]4D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-40\uff05/[\u67a6\u6d67\u5224\u5b9a]15",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]14",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]14/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8ffd\u52a0D]2D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]14",
+                    "[\u8ffd\u52a0D]2D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]12/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]11",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]10",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]8",
+                    "[\u8ffd\u52a0D]2D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-10\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-10\uff05/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-10\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "[\u4e0d\u5b89\u5b9a]",
+                    "\u624b\u306b\u6301\u3063\u305f\u6b66\u5668\u3092\u843d\u3068\u3059\u3002\u8907\u6570\u3042\u308b\u5834\u5408\u306f\u30e9\u30f3\u30c0\u30e0",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                case "V": return ("\u8eca\u4e21", new string[]
+                {
+                    "[\u30af\u30e9\u30c3\u30b7\u30e5]\u3059\u308b\u3002[\u30c1\u30a7\u30a4\u30b9]\u304b\u3089\u9664\u5916",
+                    "[\u8eca\u4e21D]4D6/[\u4e57\u54e1D]3D6/[\u64cd\u4f5c\u6027]-40%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u8eca\u4e21D]3D6/[\u4e57\u54e1D]3D6/[\u64cd\u4f5c\u6027]-30%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u4e57\u54e1D]3D6/[\u64cd\u4f5c\u6027]-20%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u8eca\u4e21D]3D6/[\u64cd\u4f5c\u6027]-20%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u4e57\u54e1D]3D6/[\u64cd\u4f5c\u6027]-10%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u8eca\u4e21D]3D6/[\u64cd\u4f5c\u6027]-10%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u4e57\u54e1D]2D6/[\u30b9\u30d4\u30fc\u30c9]-2/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u8eca\u4e21D]2D6/[\u30b9\u30d4\u30fc\u30c9]-2/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u4e57\u54e1D]2D6/[\u64cd\u7e26\u5224\u5b9a]-20%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u8eca\u4e21D]2D6/[\u64cd\u7e26\u5224\u5b9a]-20%/[\u30b9\u30d4\u30f3\u5224\u5b9a]",
+                    "[\u4e57\u54e1D]2D6/[\u64cd\u7e26\u5224\u5b9a]-20%",
+                    "[\u8eca\u4e21D]2D6/[\u64cd\u7e26\u5224\u5b9a]-20%",
+                    "[\u8eca\u4e21D]1D6/[\u64cd\u7e26\u5224\u5b9a]-20%",
+                    "[\u8eca\u4e21D]1D6/[\u64cd\u7e26\u5224\u5b9a]-10%",
+                    "\u653b\u6483\u304c\u4e57\u54e1\u3092\u304b\u3059\u3081\u308b\u3002\u30e9\u30f3\u30c0\u30e0\u306a\u4e57\u54e1\u0031\u4eba\u306b[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "\u653b\u6483\u304c\u4e57\u54e1\u306b\u5f53\u305f\u308a\u304b\u3051\u308b\u3002\u30e9\u30f3\u30c0\u30e0\u306a\u4e57\u54e1\u0031\u4eba\u306b[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "\u8eca\u4e21\u304c\u86c7\u884c\u3002\u4e57\u54e1\u5168\u54e1\u306f\u300a\u904b\u52d5\u300b\u5224\u5b9a\u3002\u5931\u6557\u3067[\u4e0d\u5b89\u5b9a]",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                case "G": return ("\u6c4e\u7528", new string[]
+                {
+                    "\u5bfe\u8c61\u306f[\u6b7b\u4ea1]",
+                    "[\u8ffd\u52a0D]4D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-40\uff05/[\u67a6\u6d67\u5224\u5b9a]15",
+                    "[\u8ffd\u52a0D]3D6/[\u51fa\u8840]2D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]14",
+                    "[\u8ffd\u52a0D]2D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]13/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8ffd\u52a0D]2D6/[\u51fa\u8840]1D6/[\u91cd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]12",
+                    "[\u8ffd\u52a0D]2D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]12/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8ffd\u52a0D]1D6/[\u91cd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]11",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]10",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]8",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-30\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8ffd\u52a0D]1D6/[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8efd\u50b7]-20\uff05/[\u67a6\u6d67\u5224\u5b9a]6",
+                    "[\u8efd\u50b7]-20\uff05/[\u4e0d\u5b89\u5b9a]",
+                    "[\u8efd\u50b7]-20\uff05",
+                    "[\u8efd\u50b7]-10\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "[\u4e0d\u5b89\u5b9a]",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                default: return GetDamageTypeAndTable("S");
+            }
+        }
+
+        private static (string type, string[] table) GetFumbleTypeAndTable(string head)
+        {
+            switch (head)
+            {
+                case "S": return ("\u5c04\u6483", new string[]
+                {
+                    "\u9283\u5668\u304c\u66b4\u767a\u3001\u81ea\u5206\u306b\u547d\u4e2d\u3002[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]\u3002\u6b66\u88c5\u55aa\u5931",
+                    "\u9283\u5668\u304c\u66b4\u767a\u3001\u81ea\u5206\u306b\u547d\u4e2d\u3002[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]\u3002\u6b66\u88c5\u55aa\u5931",
+                    "\u8aa4\u5c04\u3002\u5c04\u7dda\u306b\u6700\u3082\u8fd1\u3044\u5473\u65b9\u306b\u547d\u4e2d\u3002[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u8aa4\u5c04\u3002\u5c04\u7dda\u306b\u6700\u3082\u8fd1\u3044\u5473\u65b9\u306b\u547d\u4e2d\u3002[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u9283\u5668\u304c\u5b8c\u5168\u306b\u6545\u969c\u3002\u76f4\u305b\u306a\u3044",
+                    "\u6545\u969c\u300230\u5206\u304b\u3051\u3066\u300a\u30e1\u30ab\u30cb\u30c3\u30af\u300b\u5224\u5b9a\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u4f7f\u7528\u4e0d\u53ef\u3002",
+                    "\u6545\u969c\u3002\u300a\u30e1\u30ab\u30cb\u30c3\u30af\u300b-20\uff05\u306e\u5224\u5b9a\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u4f7f\u7528\u4e0d\u53ef\u3002",
+                    "\u6545\u969c\u3002\u300a\u30e1\u30ab\u30cb\u30c3\u30af\u300b\u5224\u5b9a\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u5c04\u6483\u4e0d\u53ef",
+                    "\u4f5c\u52d5\u4e0d\u826f\u3002[\u30a2\u30a4\u30c6\u30e0\u4f7f\u7528]\u30922\u56de\u884c\u3063\u3066\u4fee\u7406\u3059\u308b\u307e\u3067\u5c04\u6483\u4e0d\u53ef",
+                    "\u4f5c\u52d5\u4e0d\u826f\u3002[\u30a2\u30a4\u30c6\u30e0\u4f7f\u7528]\u3092\u884c\u3063\u3066\u4fee\u7406\u3059\u308b\u307e\u3067\u5c04\u6483\u4e0d\u53ef",
+                    "\u8db3\u304c\u3082\u3064\u308c\u3066\u5012\u308c\u308b\u3002[\u8ee2\u5012]",
+                    "\u7121\u7406\u306a\u5c04\u6483\u59ff\u52e2\u3067\u8155\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-20\uff05",
+                    "\u7121\u7406\u306a\u5c04\u6483\u59ff\u52e2\u3067\u3069\u3053\u304b\u306e\u7b4b\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-10\uff05",
+                    "\u6b66\u88c5\u3092\u843d\u3068\u3059\u3002\u30b9\u30ea\u30f3\u30b0\uff08\u80a9\u3072\u3082\uff09\u3082\u5207\u308c\u308b",
+                    "\u6b66\u88c5\u3092\u843d\u3068\u3059\u3002\u30b9\u30ea\u30f3\u30b0\uff08\u80a9\u3072\u3082\uff09\u304c\u3042\u308c\u3070\u843d\u3068\u3055\u306a\u3044",
+                    "\u6392\u83b3\u3055\u308c\u305f\u85ac\u83b3\u304c\u670d\u306e\u4e2d\u306b\u3002[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "\u6392\u83b3\u3055\u308c\u305f\u85ac\u83b3\u304c\u9854\u306b\u5f53\u305f\u308b\u3002[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "\u85ac\u83b3\u3092\u8e0f\u3093\u3067\u614b\u52e2\u3092\u5d29\u3059\u3002[\u4e0d\u5b89\u5b9a]",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                case "M": return ("\u683c\u95d8", new string[]
+                {
+                    "\u81ea\u5206\u306b\u547d\u4e2d\u3002[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u81ea\u5206\u306b\u547d\u4e2d\u3002[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u6700\u3082\u8fd1\u3044\u5473\u65b9\uff08\u5c04\u7a0b\u5185\u306b\u3044\u306a\u3051\u308c\u3070\u81ea\u5206\uff09\u306b[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u6700\u3082\u8fd1\u3044\u5473\u65b9\uff08\u5c04\u7a0b\u5185\u306b\u3044\u306a\u3051\u308c\u3070\u81ea\u5206\uff09\u306b[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u982d\u3092\u5f37\u304f\u6253\u3061\u3064\u3051\u308b\u3002[\u67a6\u6d67]",
+                    "\u6b66\u88c5\u304c\u58ca\u308c\u308b\u3002\u76f4\u305b\u306a\u3044\u3002[\u683c\u95d8\u30bf\u30a4\u30d7]\u306a\u3089[\u91cd\u50b7]-20\uff05",
+                    "\u6b66\u88c5\u304c\u3059\u3063\u307d\u629c\u3051\u308b\u3002\u30b0\u30ec\u30cd\u30fc\u30c9\u306e\u8aa4\u5dee\u3067\u843d\u4e0b\u5148\u3092\u6c7a\u5b9a",
+                    "\u6b66\u88c5\u304c\u640d\u50b7\u300230\u5206\u304b\u3051\u3066\u300a\u624b\u5148\u300b\u5224\u5b9a\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u4f7f\u7528\u4e0d\u53ef\u3002[\u683c\u95d8\u30bf\u30a4\u30d7]\u306a\u3089[\u91cd\u50b7]-10\uff05",
+                    "\u6b66\u88c5\u304c\u30ac\u30bf\u3064\u304f\u3002\u300a\u624b\u5148\u300b\u5224\u5b9a\uff08[\u683c\u95d8\u30bf\u30a4\u30d7]\u306a\u3089\u300a\u5f37\u9774\u300b\uff09\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u4f7f\u7528\u4e0d\u53ef\u3002",
+                    "\u6b66\u88c5\u306b\u9055\u548c\u611f\u3002[\u30a2\u30a4\u30c6\u30e0\u4f7f\u7528]\u3092\u884c\u3063\u3066\u8abf\u6574\u3059\u308b\u307e\u3067\u3001\u547d\u4e2d\u7387-20\uff05",
+                    "\u8db3\u304c\u3082\u3064\u308c\u308b\u3002[\u8ee2\u5012]",
+                    "\u8db3\u304c\u3064\u308b\u30022[\u30e9\u30a6\u30f3\u30c9]\u306e\u9593\u3001\u79fb\u52d5\u8ddd\u96e61/2",
+                    "\u7121\u7406\u306a\u4f53\u52e2\u3067\u8155\uff08\u3042\u308b\u3044\u306f\u8108\uff09\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-20\uff05",
+                    "\u7121\u7406\u306a\u4f53\u52e2\u3067\u3069\u3053\u304b\u306e\u7b4b\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-10\uff05",
+                    "\u6b66\u88c5\u3092\u843d\u3068\u3059",
+                    "\u6b66\u88c5\u3067\u81ea\u5206\u304c\u8ca0\u50b7\u3002[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "\u6b66\u88c5\u306e\u6271\u3044\u3092\u9593\u9055\u3048\u308b\u3002[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "\u653b\u6483\u3092\u907f\u3051\u3089\u308c\u3066\u4f53\u52e2\u3092\u5d29\u3059\u3002[\u4e0d\u5b89\u5b9a]",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                case "T": return ("\u6295\u64f2", new string[]
+                {
+                    "\u52e2\u3044\u3092\u3064\u3051\u3059\u304e\u3066\u8ee2\u5012\u3057\u3001\u982d\u3092\u6253\u3064\u3002[\u6c17\u7d76]",
+                    "\u81ea\u5206\u306b\u547d\u4e2d\u3002\uff08\u624b\u69b4\u5f3e\u306a\u3089\u81ea\u5206\u306e\u8db3\u5143\u306b\u843d\u3061\u308b\uff09[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u81ea\u5206\u306b\u547d\u4e2d\u3002\uff08\u624b\u69b4\u5f3e\u306a\u3089\u81ea\u5206\u306e\u8db3\u5143\u306b\u843d\u3061\u308b\uff09[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]",
+                    "\u66b4\u6295\u3002\u5c04\u7dda\u306b\u6700\u3082\u8fd1\u3044\u5473\u65b9\u306b\u547d\u4e2d\u3002[\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]\u3002\u624b\u69b4\u5f3e\u306a\u3089\u65b0\u305f\u306a\u4e2d\u5fc3\u70b9\u304b\u3089\u3055\u3089\u306b\u8aa4\u5dee\u304c\u751f\u3058\u308b",
+                    "\u66b4\u6295\u3002\u5c04\u7dda\u306b\u6700\u3082\u8fd1\u3044\u5473\u65b9\u306b\u547d\u4e2d\u3002[\u975e\u8cab\u901a\u30c0\u30e1\u30fc\u30b8]\u3002\u624b\u69b4\u5f3e\u306a\u3089\u65b0\u305f\u306a\u4e2d\u5fc3\u70b9\u304b\u3089\u3055\u3089\u306b\u8aa4\u5dee\u304c\u751f\u3058\u308b",
+                    "\u982d\u3092\u5f37\u304f\u6253\u3061\u3064\u3051\u308b\u3002[\u67a6\u6d67]",
+                    "\u80a9\u306e\u7b4b\u8089\u65ad\u88c2\u3002\u3053\u306e\u8155\u3092\u4f7f\u3046\u5224\u5b9a\u306b\u3001[\u91cd\u50b7]-20\uff05",
+                    "\u30d2\u30b8\u306e\u7b4b\u8089\u65ad\u88c2\u3002\u3053\u306e\u8155\u3092\u4f7f\u3046\u5224\u5b9a\u306b\u3001[\u91cd\u50b7]-10\uff05",
+                    "\u80a9\u306e\u7b4b\u3092\u307b\u3069\u304f\u75db\u3081\u308b\u3002\u300a\u533b\u7642\u300b\u5224\u5b9a\u306b\u6210\u529f\u3059\u308b\u307e\u3067\u3001\u3053\u306e\u8155\u3092\u4f7f\u3046\u5224\u5b9a\u306b-20\uff05",
+                    "\u80a9\u306e\u7b4b\u3092\u75db\u3081\u308b\u3002[\u884c\u52d5]\u3092\u4f7f\u3063\u3066\u4f11\u3081\u308b\u307e\u3067\u3001\u3053\u306e\u8155\u3092\u4f7f\u3046\u5224\u5b9a\u306b-20\uff05",
+                    "\u8170\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-30\uff05",
+                    "\u8db3\u304c\u3082\u3064\u308c\u3066\u5012\u308c\u308b\u3002[\u8ee2\u5012]",
+                    "\u8db3\u304c\u3064\u308b\u30022[\u30e9\u30a6\u30f3\u30c9]\u306e\u9593\u3001\u79fb\u52d5\u8ddd\u96e61/2",
+                    "\u7121\u7406\u306a\u6295\u64f2\u4f53\u52e2\u3067\u8155\uff08\u3042\u308b\u3044\u306f\u8108\uff09\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-20\uff05",
+                    "\u7121\u7406\u306a\u6295\u64f2\u4f53\u52e2\u3067\u3069\u3053\u304b\u306e\u7b4b\u3092\u75db\u3081\u308b\u3002[\u8efd\u50b7]-10\uff05",
+                    "\u80a9\u306b\u9055\u548c\u611f\u3002[\u30b7\u30e7\u30c3\u30af]-20\uff05",
+                    "\u30d2\u30b8\u306b\u9055\u548c\u611f\u3002[\u30b7\u30e7\u30c3\u30af]-10\uff05",
+                    "\u3064\u307e\u305a\u3044\u3066\u59ff\u52e2\u3092\u5d29\u3059\u3002[\u4e0d\u5b89\u5b9a]",
+                    "\u30da\u30ca\u30eb\u30c6\u30a3\u30fc\u7121\u3057"
+                });
+                default: return GetFumbleTypeAndTable("S");
+            }
+        }
+    }
+}
